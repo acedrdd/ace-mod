@@ -1,24 +1,41 @@
-# Ace Cull (Minecraft Bedrock 1.26.60, LeviLaunchroid preload-native mod)
+name: Build Ace Cull
 
-Entity culling + RAM optimizer. Culling is ON by default.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
 
-## Build from your phone
-1. Create a new GitHub repo.
-2. Upload these 4 files to the repo root: AceCull.cpp, AceConfig.hpp, CMakeLists.txt, manifest.json
-3. Add file > Create new file, name it `.github/workflows/build.yml`, paste the contents of build.yml.
-4. Actions tab > "Build Ace Cull" > Run workflow.
-5. When it finishes, open the run, download the artifact `AceCull-1.26.60`
-   (a zip containing `AceCull-1.26.60.levipack`), extract it, import the .levipack in the launcher.
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-## In game (Mod Menu > Ace Cull)
-- Entity Cull: on/off
-- Heavy Culling: culls at 60% of the distance
-- Cull Distance: 16-160 blocks (default 64)
-- RAM Optimizer + interval (default every 30 s)
+      - name: Fetch preloader SDK
+        run: git clone --recurse-submodules --depth 1 https://github.com/LiteLDev/preloader-android preloader-android
 
-## Safety
-- The cull hook is only installed if the entity callback is found exactly once AND its
-  three struct offsets can be read from the game's own code. Otherwise it logs why and
-  only the RAM optimizer runs.
-- If the game closes early twice in a row with culling armed, culling stays off until you
-  toggle the module off and on.
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPRELOADER_ANDROID_ROOT="$PWD/preloader-android"
+
+      - name: Build
+        run: cmake --build build --target ace_cull -j4
+
+      - name: Package .levipack
+        run: |
+          mkdir -p pack
+          cp build/out/libace_cull.so pack/
+          cp manifest.json pack/
+          cd pack && zip -r ../AceCull-1.26.60.levipack .
+          cd .. && unzip -l AceCull-1.26.60.levipack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AceCull-1.26.60
+          path: AceCull-1.26.60.levipack
